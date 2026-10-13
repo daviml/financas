@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Configurar Finanças</title>
+<link rel="stylesheet" href="../css/app.css">
+<style>main{max-width:760px} pre{white-space:pre-wrap;word-break:break-all;background:var(--surface-2);padding:12px;border-radius:10px;font-size:12px} ol li{margin:6px 0}</style>
+</head>
+<body>
+<main>
+  <h2 class="title">⚙️ Configurar o app da família</h2>
+  <p class="sub">Esta página roda só no seu navegador: o token nunca sai daqui, a não ser cifrado. Use-a para gerar o <b>config.js</b> e o <b>link de convite</b>.</p>
+
+  <div class="card">
+    <h3>1. Token do repositório de dados</h3>
+    <ol class="t2">
+      <li>GitHub → Settings → Developer settings → <b>Fine-grained tokens</b> → Generate new token.</li>
+      <li>Repository access: <b>Only select repositories</b> → só o repositório de dados (ex.: <code>financas-data</code>, privado).</li>
+      <li>Permissions → Repository → <b>Contents: Read and write</b>. Validade: até 1 ano (anote para trocar antes de vencer).</li>
+    </ol>
+    <div class="two">
+      <div><label class="f">Dono (usuário do GitHub)</label><input class="in" id="owner" value="daviml"></div>
+      <div><label class="f">Repositório de dados</label><input class="in" id="repo" value="financas-data"></div>
+    </div>
+    <div class="two">
+      <div><label class="f">Branch</label><input class="in" id="branch" value="main"></div>
+      <div><label class="f">Token (github_pat_…)</label><input class="in" id="token" type="password" autocomplete="off"></div>
+    </div>
+    <button class="btn sm" id="test" style="margin-top:12px">Testar token</button> <span id="testMsg" class="t2"></span>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>2. Código da família</h3>
+    <div class="t2">É a "senha da família" para usar o app num aparelho novo. Como o token cifrado fica público no site, use uma <b>frase longa</b> (4 palavras ou mais), ex.: <i>bolo-de-fuba-da-vovo-1987</i>.</div>
+    <div class="two">
+      <div><label class="f">Código da família</label><input class="in" id="code" type="password" autocomplete="off"></div>
+      <div><label class="f">Repita</label><input class="in" id="code2" type="password" autocomplete="off"></div>
+    </div>
+    <label class="f">Endereço do site (GitHub Pages)</label><input class="in" id="site" value="https://daviml.github.io/financas/">
+    <button class="btn primary" id="gen" style="margin-top:14px">Gerar config.js e link de convite</button>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card" style="margin-top:14px;display:none" id="out">
+    <h3>3. Publicar</h3>
+    <div class="t2">Substitua o arquivo <b>config.js</b> na raiz do repositório do app por este conteúdo e faça commit/push:</div>
+    <pre id="cfg"></pre>
+    <button class="btn sm" id="dl">⬇ Baixar config.js</button> <button class="btn sm" id="cp">📋 Copiar</button>
+    <h3 style="margin-top:18px">Link de convite</h3>
+    <div class="t2">Mande este link para a família (WhatsApp, por exemplo). Quem abrir já entra sem digitar o código da família. <b>Trate o link como uma senha.</b></div>
+    <pre id="inv"></pre>
+    <button class="btn sm" id="cpi">📋 Copiar link</button>
+  </div>
+</main>
+<script src="../js/core.js"></script>
+<script src="../js/crypto.js"></script>
+<script>
+const v=id=>document.getElementById(id).value.trim();
+document.getElementById('test').onclick=async()=>{
+  const m=document.getElementById('testMsg');m.textContent='testando…';
+  try{
+    const r=await fetch('https://api.github.com/repos/'+v('owner')+'/'+v('repo'),{headers:{Authorization:'Bearer '+v('token'),Accept:'application/vnd.github+json'}});
+    const j=await r.json();
+    if(!r.ok)throw new Error(r.status+' '+(j.message||''));
+    m.innerHTML=(j.private?'✓ repositório privado':'⚠ o repositório NÃO é privado')+(j.permissions?.push?' · ✓ pode gravar':' · ⚠ token sem permissão de escrita');
+  }catch(e){m.innerHTML='<span class="neg">'+esc(e.message)+'</span>'}
+};
+document.getElementById('gen').onclick=async()=>{
+  const msg=document.getElementById('msg');msg.innerHTML='';
+  const code=document.getElementById('code').value,code2=document.getElementById('code2').value;
+  if(!v('token').startsWith('github_pat_')&&!v('token').startsWith('ghp_')){msg.innerHTML='<div class="banner warn" style="margin-top:10px">Cole o token do GitHub.</div>';return}
+  if(code.length<12){msg.innerHTML='<div class="banner warn" style="margin-top:10px">Use um código da família com pelo menos 12 caracteres (de preferência uma frase).</div>';return}
+  if(code!==code2){msg.innerHTML='<div class="banner warn" style="margin-top:10px">Os códigos não são iguais.</div>';return}
+  const tok=await sealText(code,v('token'));
+  const cfg=`// Gerado por tools/setup.html em ${new Date().toLocaleString('pt-BR')}. O token do GitHub fica CIFRADO com o código da família.
+window.FIN_CONFIG = ${JSON.stringify({owner:v('owner'),repo:v('repo'),branch:v('branch')||'main',tok},null,2)};
+`;
+  document.getElementById('cfg').textContent=cfg;
+  let site=v('site');if(!site.endsWith('/'))site+='/';
+  const inv=site+'#convite='+encodeURIComponent(code);
+  document.getElementById('inv').textContent=inv;
+  document.getElementById('out').style.display='';
+  document.getElementById('dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([cfg],{type:'text/javascript'}));a.download='config.js';a.click()};
+  document.getElementById('cp').onclick=()=>navigator.clipboard.writeText(cfg);
+  document.getElementById('cpi').onclick=()=>navigator.clipboard.writeText(inv);
+};
+</script>
+</body>
+</html>

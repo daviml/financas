@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16a34a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Finanças">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Finanças</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><span class="dot">R$</span> Finanças</div>
+    <div class="monthnav" id="monthnav">
+      <button data-action="prevMonth" title="Mês anterior (←)">‹</button>
+      <div class="lbl" data-action="todayMonth" title="Voltar para o mês atual"><span id="mLbl"></span><small id="mSub"></small></div>
+      <button data-action="nextMonth" title="Próximo mês (→)">›</button>
+    </div>
+    <span class="savestate" id="saveState" data-action="syncNow"></span>
+    <button class="iconbtn" data-action="install" id="installBtn" style="display:none" title="Instalar como app">📲 Instalar app</button>
+    <button class="iconbtn" data-action="theme" title="Tema claro/escuro" id="themeBtn">◐</button>
+    <button class="userchip" id="userChip" data-action="tab" data-tab="ajustes" title="Minha conta"></button>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="inicio">Início</button>
+    <button data-tab="entradas">Entradas</button>
+    <button data-tab="lanc">Gastos do dia a dia</button>
+    <button data-tab="contas">Contas do mês</button>
+    <button data-tab="orc">Orçamento</button>
+    <button data-tab="dividas">Dívidas</button>
+    <button data-tab="cartoes">Cartões</button>
+    <button data-tab="metas">Metas</button>
+    <button data-tab="ajustes">Ajustes</button>
+  </nav>
+</header>
+
+<main id="view"></main>
+
+<button class="fab" title="Adicionar (atalho N = novo gasto)"><span>+</span> Adicionar <kbd>N</kbd></button>
+<div class="fab-menu" id="fabMenu">
+  <button data-action="addTx"><span>🧾</span><div>Gasto<small>mercado, posto, farmácia…</small></div></button>
+  <button data-action="addCardTx"><span>💳</span><div>Compra no cartão<small>à vista ou parcelada</small></div></button>
+  <button data-action="newIncome"><span>✨</span><div>Entrada extra<small>dinheiro que entrou uma vez</small></div></button>
+  <button data-action="newRecurring" data-g="receita"><span>💰</span><div>Entrada recorrente<small>salário, aposentadoria, pensão…</small></div></button>
+  <button data-action="newRecurring" data-g="fixa"><span>📅</span><div>Conta fixa<small>aluguel, luz, internet…</small></div></button>
+  <button data-action="newDebt"><span>🏦</span><div>Dívida ou parcelamento<small>empréstimo, carnê, financiamento</small></div></button>
+  <button data-action="newGoal"><span>🎯</span><div>Meta<small>juntar dinheiro para algo</small></div></button>
+</div>
+
+<nav class="bottom" id="bottomNav">
+  <button data-tab="inicio"><span class="i">🏠</span>Início</button>
+  <button data-tab="lanc"><span class="i">🧾</span>Gastos</button>
+  <button data-tab="contas"><span class="i">✅</span>Contas</button>
+  <button data-tab="metas"><span class="i">🎯</span>Metas</button>
+  <button data-more="1"><span class="i">☰</span>Mais</button>
+</nav>
+<div class="more-sheet" id="moreSheet">
+  <button data-tab="entradas"><span>💰</span>Entradas</button>
+  <button data-tab="orc"><span>📊</span>Orçamento (planilha)</button>
+  <button data-tab="dividas"><span>🏦</span>Dívidas</button>
+  <button data-tab="cartoes"><span>💳</span>Cartões de crédito</button>
+  <button data-tab="ajustes"><span>⚙️</span>Ajustes, conta e backup</button>
+  <button data-action="theme"><span>◐</span>Trocar tema claro/escuro</button>
+  <button data-action="logout"><span>🚪</span>Sair</button>
+</div>
+
+<dialog id="modal"><div id="modalIn"></div></dialog>
+<dialog id="dlg"></dialog>
+<div id="tip"></div>
+<div id="toast"><span id="toastMsg"></span><button id="toastUndo">Desfazer</button></div>
+<div id="auth"></div>
+
+<script src="config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/crypto.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/store.js"></script>
+<script src="js/calc.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/views.js"></script>
+<script src="js/forms.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
