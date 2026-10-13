@@ -341,6 +341,8 @@ document.addEventListener('click',async e=>{
     case 'editCard':e.stopPropagation();cardModal(cardById(id));break;
     case 'cardView':UI.cardView=id;render();break;
     case 'newGoal':goalModal();break;
+    case 'newConsorcio':consorcioModal();break;
+    case 'editConsorcio':consorcioModal(consorcioById(id));break;
     case 'editGoal':goalModal(goalById(id));break;
     case 'goalView':UI.goalView=id;render();break;
     case 'payoff':payoffModal(itemById(id));break;

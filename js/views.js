@@ -125,6 +125,8 @@ function billRow(i,ym,compact){
   if(i.group==='parcela'){const di=debtInfo(i);const idx=di.ms.indexOf(ym);if(idx>=0)extra=` · parcela ${idx+1+di.before}/${di.total}`}
   if(i.group==='fatura')extra=' · '+plural(cardInstallments(i._card).filter(x=>x.ym===ym).length,'compra');
   if(i.goal&&goalById(i.goal))extra=' · meta '+esc(goalById(i.goal).name);
+  if(i.cons&&i.cons.role==='pay'){const c=consorcioById(i.cons.id);if(c){const x=consInfo(c),k=monthsDiff(x.first,ym);if(k>=0&&k<x.n)extra=` · ${k+1}/${x.n} do consórcio`}}
+  if(i.cons&&i.cons.role==='get')extra=' · sua vez no consórcio';
   return `<div class="bill ${compact?'compact':''} ${d.cls} ${i.group==='fatura'?'fatura':''}" data-action="togglePaid" data-id="${i.id}" data-m="${ym}">
     <div class="chk">✓</div>
     <div class="info"><div class="nm">${i.icon&&i.group!=='diadia'?i.icon+' ':''}${esc(i.name)}</div><div class="meta">${d.text}${compact?'':extra}</div></div>
@@ -145,8 +147,8 @@ function txRow(t){
 }
 
 /* ---------- Entradas ---------- */
-const incKind=i=>i.kind==='salario'||i.salary?'Salário':i.kind==='13'?'13º':i.kind==='outra'?'Outras':'Extras';
-const KINDS=['Salário','13º','Outras','Extras'];
+const incKind=i=>i.kind==='salario'||i.salary?'Salário':i.kind==='13'?'13º':i.kind==='outra'?'Outras':i.kind==='consorcio'?'Consórcio':'Extras';
+const KINDS=['Salário','13º','Outras','Consórcio','Extras'];
 function vEntradas(){
   const ym=UI.month,c=calc(ym);
   const list=byGroup('receita').filter(i=>planned(i,ym)>0||st(i,ym)).sort((a,b)=>KINDS.indexOf(incKind(a))-KINDS.indexOf(incKind(b))||isPaid(a,ym)-isPaid(b,ym));
@@ -158,7 +160,7 @@ function vEntradas(){
   const yr=ym.slice(0,4);
   const extras=byGroup('receita').filter(i=>incKind(i)==='Extras').flatMap(i=>ms.filter(m=>planned(i,m)>0||st(i,m)).map(m=>({i,m}))).sort((a,b)=>b.m.localeCompare(a.m));
   const extraYear=extras.filter(x=>x.m.startsWith(yr)).reduce((s,x)=>s+val(x.i,x.m),0);
-  const recurring=byGroup('receita').filter(i=>i.rec&&i.kind!=='extra');
+  const recurring=byGroup('receita').filter(i=>i.rec&&i.kind!=='extra'&&!i.cons);
   return `
   <h2 class="title">Entradas</h2>
   <p class="sub">Salário, 13º, outras rendas e qualquer dinheiro extra. Toque numa entrada para marcar como recebida; use ✎ para mudar o valor deste mês.</p>
@@ -567,6 +569,8 @@ function vMetas(){
         </div></div>`}).join(''):'<div class="empty">Nenhuma meta ainda. Que tal começar por uma <b>reserva de emergência</b>?<br><br><button class="btn primary" data-action="newGoal">+ Criar meta</button></div>'}
     </div>
 
+    ${consCard()}
+
     <div class="card span-12"><h3>Evolução <span class="right t2">comparado ao plano até agora: <b class="${diff<0?'neg':'pos'}">${diff>=0?'+':''}${fmt(diff)}</b></span></h3>
       <div class="chips" style="margin:-4px 0 10px">${views.map(([k,l])=>`<button class="chip ${gv===k?'on':''}" data-action="goalView" data-id="${k}">${esc(l)}</button>`).join('')}</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-2);margin:-4px 0 6px">
@@ -656,6 +660,7 @@ function vAjustes(){
         <button class="btn sm" data-action="newDebt">🏦 Dívida / parcelamento</button>
         <button class="btn sm" data-action="newCard">💳 Cartão de crédito</button>
         <button class="btn sm" data-action="newGoal">🎯 Meta</button>
+        <button class="btn sm" data-action="newConsorcio">🤝 Consórcio</button>
       </div>
     </div>
 
@@ -692,3 +697,19 @@ vAjustes.after=()=>{
   $('#setFolha').onchange=e=>{S.settings.folhaFecha=clampDay(e.target.value)||20;save();toast('Salvo')};
   $('#importFile').onchange=e=>{const f=e.target.files[0];if(f)importBackupFile(f);e.target.value=''};
 };
+
+/* ---------- Consórcios (na tela de Metas) ---------- */
+function consCard(){
+  const cs=consorcios();
+  return `<div class="card span-12"><h3>🤝 Consórcios <span class="right"><button class="btn sm" data-action="newConsorcio">+ Consórcio</button></span></h3>
+    ${cs.length?cs.map(c=>{const x=consInfo(c),nm=c.pay.cons.nome||c.pay.name;return`<div class="goal">
+      <div class="row1"><span class="nm">🤝 ${esc(nm)}</span><span class="num"><b>${fmt(x.pago)}</b> <span class="muted">pago de ${fmt(x.parcela*x.n)}</span></span></div>
+      <div class="pbar"><i style="width:${x.n?x.paidN/x.n*100:0}%"></i></div>
+      <div class="meta">
+        <span>${x.paidN} de ${x.n} pagamentos de ${fmt(x.parcela)}</span>
+        ${x.falta?`<span>falta pagar ${fmt(x.falta)}${x.nextPay?' · próximo '+ymLabel(x.nextPay):''}</span>`:'<span class="pos">pagamentos concluídos</span>'}
+        <span>${x.recebido?`<b class="pos">✓ recebeu ${fmt(x.valor)}</b>${x.mes?' em '+ymLabel(x.mes):''}`:x.mes?`recebe <b class="pos">${fmt(x.valor)}</b> em <b>${ymLabel(x.mes)}</b>`:`recebe ${fmt(x.valor)} · <b>mês ainda não sorteado</b>`}</span>
+        <button class="link" data-action="editConsorcio" data-id="${c.id}">✎ editar</button>
+      </div></div>`}).join(''):'<div class="empty">Participa de um consórcio entre família ou amigos? Cadastre aqui: o valor sai todo mês nas contas e o total entra no mês da sua vez.</div>'}
+  </div>`;
+}

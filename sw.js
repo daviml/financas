@@ -1,7 +1,7 @@
 // Service worker: guarda o app para abrir sem internet.
 // Rede primeiro (pega a versão nova), cache se estiver offline. A API do GitHub nunca passa pelo cache.
 // Ao publicar uma versão nova, aumente o número do CACHE.
-const CACHE = 'financas-v2';
+const CACHE = 'financas-v3';
 const FILES = ['./', './index.html', './config.js', './css/app.css', './manifest.webmanifest',
   './js/core.js', './js/crypto.js', './js/cloud.js', './js/store.js', './js/calc.js', './js/ui.js', './js/views.js', './js/forms.js', './js/app.js',
   './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];

@@ -685,15 +685,89 @@ async function deleteItemFlow(it){
     if(!await uiConfirm(`Excluir “${it.name}”?`,it.group==='diadia'&&n?plural(n,'gasto')+' ficará sem categoria.':'Os valores e pagamentos dele somem do plano (dá para desfazer logo em seguida).','Excluir',true))return;
     snap();
   }
-  S.items=S.items.filter(i=>i.id!==it.id);
-  Object.keys(S.status).forEach(k=>{if(k.endsWith('|'+it.id))delete S.status[k]});
+  // consórcio: a parcela e o recebimento são excluídos juntos
+  const ids=it.cons?S.items.filter(i=>i.cons&&i.cons.id===it.cons.id).map(i=>i.id):[it.id];
+  S.items=S.items.filter(i=>!ids.includes(i.id));
+  Object.keys(S.status).forEach(k=>{if(ids.some(id=>k.endsWith('|'+id)))delete S.status[k]});
   save();if(modal.open)closeModal();render();toast('“'+it.name+'” excluído',true);
 }
 function editItem(it){
   if(!it)return;
-  if(it.group==='parcela')debtModal(it);
+  if(it.cons&&consorcioById(it.cons.id))consorcioModal(consorcioById(it.cons.id));
+  else if(it.group==='parcela')debtModal(it);
   else if(it.group==='reserva'&&it.goal&&goalById(it.goal))goalModal(goalById(it.goal));
   else if(it.group==='fatura')cardModal(it._card);
   else if((it.group==='receita'&&(it.kind==='extra'||it.extra))||it.group==='quitacao'){const m=Object.keys(it.values).sort()[0]||UI.month;cellModal(it,m)}
   else recurringModal(it.group,it);
+}
+
+/* ---------- Consórcio (família / amigos) ----------
+   Paga um valor todo mês por N meses e recebe o total no mês da sua vez.
+   Cria dois itens ligados por cons.id: a parcela (conta fixa) e o recebimento (entrada). */
+function consorcioModal(c){
+  const isNew=!c,cf=c?.pay.cons||{};
+  const n0=cf.parcelas||10,p0=cf.pagasAntes||0,next0=c?.pay.rec?.start||todayYM();
+  const parc0=c?.pay.rec?.amount||0;
+  openModal(`
+    <div class="m-hd"><h3>${isNew?'Novo consórcio':esc(cf.nome||c.pay.name)}</h3><button class="x" data-close>×</button></div>
+    <div class="m-bd">
+      <div class="t2">Consórcio entre família ou amigos: todo mês você paga a sua parte e, no mês da sua vez, recebe o valor cheio.</div>
+      <label class="f">Nome</label>
+      <input class="in" id="kName" value="${esc(cf.nome||'')}" placeholder="Ex.: Consórcio da família, Caixinha das amigas">
+      <div class="two">
+        <div><label class="f">Quanto paga por mês</label><input class="in num" id="kParc" inputmode="decimal" value="${numIn(parc0)}" placeholder="0,00"></div>
+        <div><label class="f">Paga todo dia</label><input class="in" id="kDue" type="number" min="1" max="31" value="${c?.pay.due||''}" placeholder="opcional"></div>
+      </div>
+      <div class="two">
+        <div><label class="f">Quantos meses no total</label><input class="in" id="kN" type="number" min="2" max="120" value="${n0}"></div>
+        <div><label class="f">${isNew?'Quantos já pagou':'Pagos antes de usar o app'}</label><input class="in" id="kPaid" type="number" min="0" value="${p0}"></div>
+      </div>
+      <label class="f">${isNew?'Mês do próximo pagamento':'Primeiro pagamento no app'}</label>
+      <select class="in" id="kStart">${monthOpts(next0,ymAdd(next0<todayYM()?next0:todayYM(),-12),ymAdd(todayYM(),36))}</select>
+      <div class="two">
+        <div><label class="f">Mês em que você recebe</label><select class="in" id="kMes"></select></div>
+        <div><label class="f">Valor que você recebe</label><input class="in num" id="kVal" inputmode="decimal" value="${numIn(cf.valor)}" placeholder="0,00"></div>
+      </div>
+      <div class="banner info preview" id="kPrev" style="display:block"></div>
+    </div>
+    <div class="m-ft">${isNew?'':'<button class="btn danger" id="kDel">Excluir</button>'}<span class="spacer"></span><button class="btn" data-close>Cancelar</button><button class="btn primary" id="kSave">${isNew?'Adicionar':'Salvar'}</button></div>`,m=>{
+      const q=x=>m.querySelector(x);
+      let valTouched=!!cf.valor,mesSel=cf.mes||'';
+      if(isNew)setTimeout(()=>q('#kName').focus(),30);
+      q('#kVal').addEventListener('input',()=>valTouched=true);
+      const read=()=>{const n=Math.max(2,parseInt(q('#kN').value)||0),p=Math.max(0,Math.min(n-1,parseInt(q('#kPaid').value)||0)),start=q('#kStart').value,first=ymAdd(start,-p);return{n,p,start,first,last:ymAdd(first,n-1),parc:parseMoney(q('#kParc').value)}};
+      const upd=()=>{
+        const r=read();
+        if(!valTouched)q('#kVal').value=r.parc?numIn(round2(r.parc*r.n)):'';
+        const opts=['<option value="">Ainda não sei (sorteio)</option>'];
+        for(let k=0;k<r.n;k++){const mm=ymAdd(r.first,k);opts.push(`<option value="${mm}" ${mm===mesSel?'selected':''}>${k+1}º mês · ${ymLabel(mm)}${mm<r.start?' (já recebi)':''}</option>`)}
+        q('#kMes').innerHTML=opts.join('');
+        const mes=q('#kMes').value,v=parseMoney(q('#kVal').value);
+        if(!r.parc){q('#kPrev').innerHTML='Informe quanto paga por mês.';return}
+        q('#kPrev').innerHTML=`Paga <b>${fmt(r.parc)}</b> por mês de ${ymLabel(r.first)} a <b>${ymLabel(r.last)}</b> (${plural(r.n-r.p,'pagamento')} pela frente = ${fmt((r.n-r.p)*r.parc)}).<br>`+
+          (mes?(mes<r.start?`Você já recebeu ${fmt(v)} em ${ymLabel(mes)}.`:`Recebe <b class="pos">${fmt(v)}</b> em <b>${ymLabel(mes)}</b> — entra como entrada daquele mês.`):'O mês do recebimento fica em aberto — edite o consórcio quando for sorteado.')+
+          (v?`<br>${v>r.parc*r.n+.005?'Você recebe '+fmt(v-r.parc*r.n)+' a mais do que paga.':v<r.parc*r.n-.005?'Você paga '+fmt(r.parc*r.n-v)+' a mais do que recebe.':'Total pago = total recebido.'}`:'');
+      };
+      q('#kMes').onchange=()=>{mesSel=q('#kMes').value;upd()};
+      ['#kParc','#kN','#kPaid','#kVal'].forEach(x=>q(x).addEventListener('input',upd));q('#kStart').onchange=upd;upd();
+      q('#kSave').onclick=()=>{
+        const name=q('#kName').value.trim(),r=read(),v=parseMoney(q('#kVal').value),mes=q('#kMes').value;
+        if(!name){bad(q('#kName'));return}if(!r.parc){bad(q('#kParc'));return}if(!v){bad(q('#kVal'));return}
+        snap();
+        const id=c?.id||uid();
+        const pay=c?.pay||{id:uid(),group:'fixa',values:{},icon:'🤝'};
+        pay.name='Consórcio: '+name;pay.due=clampDay(q('#kDue').value);
+        const oldRec=pay.rec;pay.rec={freq:'m',amount:r.parc,start:r.start,count:r.n-r.p};
+        if(oldRec&&oldRec.amount===r.parc&&oldRec.changes)pay.rec.changes=oldRec.changes;
+        pay.cons={id,role:'pay',nome:name,parcelas:r.n,pagasAntes:r.p,valor:v,...(mes?{mes}:{}),...(mes&&mes<r.start?{recebido:true}:{})};
+        const get=c?.get||{id:uid(),group:'receita',kind:'consorcio',values:{},icon:'🤝'};
+        get.name='Consórcio: '+name+' (minha vez)';get.cons={id,role:'get'};
+        if(mes&&mes>=r.start){get.rec={freq:'m',amount:v,start:mes,count:1};if(get.over)Object.keys(get.over).forEach(k=>{if(k!==mes)delete get.over[k]})}
+        else{delete get.rec;delete get.over;get.values={}}
+        if(!c)S.items.push(pay,get);else if(!c.get)S.items.push(get);
+        ensureStart(r.start);materialize(pay);materialize(get);
+        save();closeModal();render();toast((isNew?'Consórcio adicionado: ':'Consórcio salvo: ')+name,true);
+      };
+      const del=q('#kDel');if(del)del.onclick=()=>deleteItemFlow(c.pay);
+    });
 }

@@ -201,3 +201,26 @@ function goalETA(R,target){
   while(bal<target&&k++<600){m=ymAdd(m,1);bal=bal*(1+r)+avg}
   return k>600?null:{m,after:true,avg};
 }
+
+/* ---------- Consórcios ----------
+   Dois itens ligados por cons.id: a parcela mensal (conta fixa, role 'pay')
+   e o recebimento no mês da sua vez (entrada, role 'get'). */
+function consorcios(){
+  const by={};
+  S.items.forEach(i=>{if(i.cons&&i.cons.id)(by[i.cons.id]=by[i.cons.id]||{id:i.cons.id})[i.cons.role]=i});
+  return Object.values(by).filter(c=>c.pay);
+}
+const consorcioById=id=>consorcios().find(c=>c.id===id);
+function consInfo(c){
+  const p=c.pay,cf=p.cons,before=cf.pagasAntes||0;
+  const ms=monthsList().filter(m=>planned(p,m)>0);
+  const paid=ms.filter(m=>isPaid(p,m)),open=ms.filter(m=>!isPaid(p,m));
+  const parcela=p.rec?.amount||(ms.length?planned(p,ms[0]):0);
+  const n=cf.parcelas||ms.length+before;
+  const first=ymAdd(p.rec?.start||ms[0]||todayYM(),-before);
+  const mes=cf.mes||null;
+  const recebido=!!cf.recebido||!!(c.get&&mes&&isPaid(c.get,mes));
+  return{n,paidN:paid.length+before,pago:round2(paid.reduce((s,m)=>s+val(p,m),0)+before*parcela),
+    falta:round2(open.reduce((s,m)=>s+val(p,m),0)),parcela,first,last:ymAdd(first,n-1),
+    mes,valor:cf.valor||0,recebido,nextPay:open[0]};
+}
