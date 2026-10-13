@@ -12,6 +12,7 @@ function showAuth(mode,err=''){
 }
 function hideAuth(){$('#auth').classList.remove('on');document.body.style.overflow=''}
 function renderAuth(){
+  if(AUTH.mode==='install'){renderInstall();return}
   const A=AUTH,users=knownUsers();
   const errH=A.err?`<div class="banner warn auth-err">⚠ ${esc(A.err)}</div>`:'';
   const btn=(id,label)=>`<button class="btn primary" id="${id}" ${A.busy?'disabled':''}>${A.busy?'<span class="spin"></span> Aguarde…':label}</button>`;
@@ -400,9 +401,45 @@ setInterval(()=>{if(USER&&document.visibilityState==='visible'&&!syncBusy)sync()
 
 // PWA: instalável e abre sem internet (só quando servido por http/https, ex.: GitHub Pages)
 let installEvt=null;
-addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;$('#installBtn').style.display=''});
-addEventListener('appinstalled',()=>{$('#installBtn').style.display='none';toast('App instalado ✓')});
+addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;$('#installBtn').style.display='';if(AUTH.mode==='install'&&$('#auth').classList.contains('on'))renderInstall()});
+addEventListener('appinstalled',()=>{$('#installBtn').style.display='none';INSTALL.done=true;if(AUTH.mode==='install'&&$('#auth').classList.contains('on'))renderInstall();else toast('App instalado ✓')});
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+/* ---------- No celular, a primeira coisa é oferecer a instalação do app ---------- */
+const UA=navigator.userAgent;
+const isIOS=/iPhone|iPad|iPod/i.test(UA)||(/Macintosh/.test(UA)&&navigator.maxTouchPoints>1);
+const isMobile=isIOS||/Android|Mobi/i.test(UA);
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const INSTALL={done:false,resolve:null};
+function offerInstall(){
+  if(!isMobile||isStandalone()||sessionStorage.getItem('fin-noinstall'))return Promise.resolve();
+  return new Promise(res=>{INSTALL.resolve=res;showAuth('install');});
+}
+function renderInstall(){
+  const iosSafari=isIOS&&!/CriOS|FxiOS|EdgiOS/i.test(UA);
+  let how;
+  if(INSTALL.done)how=`<div class="banner info" style="margin-top:14px;display:block">✅ App instalado! Feche esta página e abra o <b>Finanças</b> pelo ícone na tela inicial.</div>`;
+  else if(installEvt)how=`<button class="btn primary" id="iGo">📲 Instalar o app</button>`;
+  else if(isIOS)how=`<ol class="t2" style="padding-left:20px;line-height:1.7;margin:14px 0 0">
+      ${iosSafari?'':'<li>Abra este endereço no <b>Safari</b>.</li>'}
+      <li>Toque em <b>Compartilhar</b> (o quadrado com a seta para cima, na barra de baixo).</li>
+      <li>Escolha <b>Adicionar à Tela de Início</b> e toque em <b>Adicionar</b>.</li>
+      <li>Abra o app pelo ícone <b>Finanças</b> na tela inicial.</li></ol>
+    ${inviteCode?`<div class="banner info" style="margin-top:12px;display:block">Se o app instalado pedir o <b>código da família</b>, digite: <b style="user-select:all">${esc(inviteCode)}</b></div>`:''}`;
+  else how=`<ol class="t2" style="padding-left:20px;line-height:1.7;margin:14px 0 0">
+      <li>Toque no menu do navegador <b>⋮</b> (no canto de cima).</li>
+      <li>Escolha <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li>
+      <li>Abra o app pelo ícone <b>Finanças</b> na tela inicial.</li></ol>
+    <div class="hint">Se aparecer um aviso do navegador oferecendo instalar, aceite.</div>`;
+  $('#auth').innerHTML=`<div class="auth-box"><div class="auth-logo"><span class="dot">R$</span> Finanças</div><div class="t2">Controle de gastos, contas, dívidas e metas da família.</div>
+    <div class="card"><h3>📲 Instale o app no seu celular</h3>
+      <div class="t2">Fica com ícone na tela inicial, abre em tela cheia e funciona até sem internet. Leva poucos segundos.</div>
+      ${how}
+      <div class="auth-links" style="justify-content:center;margin-top:18px"><button class="link" id="iSkip">Agora não, continuar no navegador</button></div>
+    </div></div>`;
+  const go=$('#iGo');if(go)go.onclick=async()=>{installEvt.prompt();const c=await installEvt.userChoice.catch(()=>null);installEvt=null;if(c&&c.outcome==='accepted')INSTALL.done=true;renderInstall()};
+  $('#iSkip').onclick=()=>{sessionStorage.setItem('fin-noinstall','1');const r=INSTALL.resolve;INSTALL.resolve=null;hideAuth();r&&r()};
+}
 
 /* =========================================================
    Início
@@ -410,10 +447,11 @@ if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.
 (async function boot(){
   if(!window.crypto||!crypto.subtle){showAuth('setup');$('#auth .card').innerHTML='<h3>Navegador sem suporte</h3><div class="t2">Abra o app pelo endereço https (GitHub Pages) num navegador atualizado.</div>';return}
   if(!configured()){showAuth('setup');return}
-  if(!hasDevice()){
-    if(inviteCode){try{await unlockFamily(inviteCode)}catch(e){showAuth('family',e.message);return}}
-    else{showAuth('family');return}
-  }
+  // o convite é aplicado antes de oferecer a instalação: no Android o app instalado já herda o acesso
+  let famErr='';
+  if(!hasDevice()&&inviteCode){try{await unlockFamily(inviteCode)}catch(e){famErr=e.message}}
+  await offerInstall();
+  if(!hasDevice()){showAuth('family',famErr);return}
   try{
     const sess=await resumeSession();
     if(sess){await enterApp(sess.user,sess.key);return}
